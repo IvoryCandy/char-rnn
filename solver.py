@@ -38,13 +38,24 @@ class Trainer(object):
             self.model.cuda()
             cudnn.benchmark = True
 
+    def get_optimizer(self):
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=self.args.lr)
+        self.optimizer = ScheduledOptim(optimizer)
+
     @staticmethod
     def get_loss(score, label):
         return nn.CrossEntropyLoss()(score, label.view(-1))
 
-    def get_optimizer(self):
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=self.args.lr)
-        self.optimizer = ScheduledOptim(optimizer)
+    def save_checkpoint(self, epoch):
+        if (epoch + 1) % self.args.save_interval == 0:
+            model_out_path = self.args.save_file + "epoch_{}_model.pth".format(epoch + 1)
+            torch.save(self.model, model_out_path)
+            print("Checkpoint saved to {}".format(model_out_path))
+
+    def save(self):
+        model_out_path = self.args.save_file + "final_model.pth"
+        torch.save(self.model, model_out_path)
+        print("Final model saved to {}".format(model_out_path))
 
     @staticmethod
     def pick_top_n(predictions, top_n=5):
@@ -135,6 +146,8 @@ class Trainer(object):
             print('===> EPOCH: {}/{}'.format(e + 1, self.args.max_epoch))
             self.train()
             self.test()
+            self.save_checkpoint(e)
+        self.save()
 
 
 class AverageValueMeter(object):

@@ -4,7 +4,8 @@ import torch
 
 class TextConverter(object):
     def __init__(self, text_path, max_vocab=5000):
-        """Construct a text index converter.
+        """
+        Construct a text index converter.
 
         Args:
             text_path: txt file path.

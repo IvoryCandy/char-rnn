@@ -1,19 +1,20 @@
+import os
 import argparse
 import torch
 from solver import Trainer
 
 parser = argparse.ArgumentParser()
+parser.add_argument('--mode', required=False, type=str, default='train', help='train/eval')
 # dataset setup
-parser.add_argument('--txt', required=False, type=str, default='./dataset/poetry.txt', help='training content directory')
+parser.add_argument('--txt', required=False, type=str, default='./dataset/jay.txt', help='training content directory')
 parser.add_argument('--len', required=False, type=int, default=20, help='length for each training content line')
 parser.add_argument('--max_vocab', required=False, type=int, default=8000, help='max vocab length')
-parser.add_argument('--begin', required=False, type=str, default='天青色等烟雨', help='begin characters of text')
+parser.add_argument('--begin', required=False, type=str, default='人在广东已经漂泊十年', help='begin characters of text')
 parser.add_argument('--predict_len', required=False, type=int, default=50, help='length of prediction text')
 
 # saving directories
-parser.add_argument('--result_file', required=False, type=str, default='result.txt', help='directory to save result')
 parser.add_argument('--save_file', required=False, type=str, default='./checkpoints/', help='directory to save checkpoints')
-parser.add_argument('--save_interval', required=False, type=int, default=30, help='the frequency to save checkpoints in cases of epochs')
+parser.add_argument('--save_interval', required=False, type=int, default=10, help='the frequency to save checkpoints in cases of epochs')
 
 # generated context
 parser.add_argument('--load_model', required=False, type=str, default='./checkpoints/CharRNN_final_model.pth', help='directory of the model to be loaded')
@@ -41,12 +42,20 @@ args = parser.parse_args()
 
 
 def main():
+    if not os.path.exists(args.save_file):
+        os.makedirs(args.save_file)
+
     if args.cuda and not torch.cuda.is_available():
         args.cuda = False
         print("Since GPU is not available, model will run on CPU")
 
     trainer = Trainer(args)
-    trainer.run()
+    if args.mode == 'train':
+        trainer.run()
+    elif args.mode == 'eval':
+        trainer.predict()
+    else:
+        raise Exception("mode not found")
 
 
 if __name__ == '__main__':
