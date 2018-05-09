@@ -4,7 +4,6 @@ import numpy as np
 import torch
 from torch import nn
 from torch.backends import cudnn
-from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
@@ -15,6 +14,7 @@ from data import TextDataset, TextConverter
 class Trainer(object):
     def __init__(self, args):
         self.args = args
+        self.device = torch.device('cuda' if self.args.cuda else 'cpu')
 
         self.convert = None
         self.model = None
@@ -33,9 +33,9 @@ class Trainer(object):
         self.train_loader = DataLoader(dataset, self.args.batch_size, shuffle=True, num_workers=self.args.num_workers)
 
     def get_model(self):
-        self.model = CharRNN(self.convert.vocab_size, self.args.embed_dim, self.args.hidden_size, self.args.num_layers, self.args.dropout, self.args.cuda)
+        self.model = CharRNN(self.convert.vocab_size, self.args.embed_dim, self.args.hidden_size, self.args.num_layers,
+                             self.args.dropout, self.args.cuda).to(self.device)
         if self.args.cuda:
-            self.model.cuda()
             cudnn.benchmark = True
 
     def get_optimizer(self):
@@ -71,10 +71,7 @@ class Trainer(object):
         self.model.train()
         for x, y in tqdm(self.train_loader):
             y = y.long()
-            if self.args.cuda:
-                x = x.cuda()
-                y = y.cuda()
-            x, y = Variable(x), Variable(y)
+            x, y = x.to(self.device), y.to(self.device)
 
             # Forward.
             score, _ = self.model(x)
@@ -85,10 +82,10 @@ class Trainer(object):
             loss.backward()
 
             # Clip gradient.
-            nn.utils.clip_grad_norm(self.model.parameters(), 5)
+            nn.utils.clip_grad_norm_(self.model.parameters(), 5)
             self.optimizer.step()
 
-            self.meter.add(loss.data[0])
+            self.meter.add(loss.item())
 
         print('perplexity: {}'.format(np.exp(self.meter.value()[0])))
 
@@ -100,44 +97,34 @@ class Trainer(object):
         samples = [self.convert.word_to_int(c) for c in begin]
         input_txt = torch.LongTensor(samples)[None]
 
-        if self.args.cuda:
-            input_txt = input_txt.cuda()
-
-        input_txt = Variable(input_txt)
+        input_txt = input_txt.to(self.device)
         _, init_state = self.model(input_txt)
         result = samples
         model_input = input_txt[:, -1][:, None]
 
-        for i in range(text_len):
-            out, init_state = self.model(model_input, init_state)
-            prediction = self.pick_top_n(out.data)
-            model_input = Variable(torch.LongTensor(prediction))[None]
-            if self.args.cuda:
-                model_input = model_input.cuda()
-            result.append(prediction[0])
+        with torch.no_grad():
+            for i in range(text_len):
+                out, init_state = self.model(model_input, init_state)
+                prediction = self.pick_top_n(out.data)
+                model_input = torch.LongTensor(prediction)[None].to(self.device)
+                result.append(prediction[0])
 
         print(self.convert.arr_to_text(result))
 
     def predict(self):
         self.model.eval()
         samples = [self.convert.word_to_int(c) for c in self.args.begin]
-        input_txt = torch.LongTensor(samples)[None]
-
-        if self.args.cuda:
-            input_txt = input_txt.cuda()
-
-        input_txt = Variable(input_txt)
+        input_txt = torch.LongTensor(samples)[None].to(self.device)
         _, init_state = self.model(input_txt)
         result = samples
         model_input = input_txt[:, -1][:, None]
 
-        for i in range(self.args.predict_len):
-            out, init_state = self.model(model_input, init_state)
-            prediction = self.pick_top_n(out.data)
-            model_input = Variable(torch.LongTensor(prediction))[None]
-            if self.args.cuda:
-                model_input = model_input.cuda()
-            result.append(prediction[0])
+        with torch.no_grad():
+            for i in range(self.args.predict_len):
+                out, init_state = self.model(model_input, init_state)
+                prediction = self.pick_top_n(out.data)
+                model_input = torch.LongTensor(prediction)[None].to(self.device)
+                result.append(prediction[0])
 
         print(self.convert.arr_to_text(result))
 
